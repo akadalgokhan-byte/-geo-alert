@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111111">
+<title>Geo Alert</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin:0;padding:20px;background:#f5f5f7;color:#111}
+.card{background:white;border-radius:18px;padding:18px;margin:12px 0;box-shadow:0 2px 12px #0001}
+button{width:100%;padding:15px;border:0;border-radius:12px;background:#111;color:white;font-size:16px;margin:6px 0}
+button.secondary{background:#e5e5ea;color:#111}
+input{width:100%;box-sizing:border-box;padding:13px;border:1px solid #ccc;border-radius:10px;margin:5px 0 10px;font-size:16px}
+#status{font-weight:600}
+.small{color:#666;font-size:14px}
+</style>
+</head>
+<body>
+<h1>📍 Geo Alert</h1>
+
+<div class="card">
+  <div id="status">Konum izni bekleniyor…</div>
+  <div class="small" id="coords">Konum alınmadı.</div>
+  <button onclick="start()">Konum Takibini Başlat</button>
+  <button class="secondary" onclick="testSound()">🔊 Sesli Uyarıyı Test Et</button>
+</div>
+
+<div class="card">
+<h3>Yeni konum ekle</h3>
+<input id="name" placeholder="Konum adı">
+<input id="lat" type="number" step="any" placeholder="Enlem (latitude)">
+<input id="lon" type="number" step="any" placeholder="Boylam (longitude)">
+<input id="radius" type="number" value="3000" placeholder="Uyarı yarıçapı (metre)">
+<button onclick="addZone()">Konumu Ekle</button>
+</div>
+
+<div class="card">
+<h3>Kayıtlı konumlar</h3>
+<div id="zones"></div>
+</div>
+
+<script>
+let watchId=null;
+let lastAlerts={};
+let zones=JSON.parse(localStorage.getItem("geoZones")||"[]");
+
+function save(){localStorage.setItem("geoZones",JSON.stringify(zones));render();}
+function render(){
+ const box=document.getElementById("zones");
+ box.innerHTML="";
+ if(!zones.length){box.innerHTML='<div class="small">Henüz konum eklenmedi.</div>';return;}
+ zones.forEach((z,i)=>{
+  const d=document.createElement("div");
+  d.className="card";
+  d.innerHTML=`<b>${escapeHtml(z.name)}</b><br><span class="small">${z.lat.toFixed(6)}, ${z.lon.toFixed(6)} · ${z.radius} m</span>
+  <button class="secondary" onclick="removeZone(${i})">Sil</button>`;
+  box.appendChild(d);
+ });
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));}
+function addZone(){
+ const name=document.getElementById("name").value.trim()||"Kayıtlı konum";
+ const lat=Number(document.getElementById("lat").value);
+ const lon=Number(document.getElementById("lon").value);
+ const radius=Number(document.getElementById("radius").value)||3000;
+ if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180){
+  alert("Enlem/boylam değerlerini kontrol et."); return;
+ }
+ zones.push({name,lat,lon,radius});
+ save();
+ document.getElementById("name").value="";
+ document.getElementById("lat").value="";
+ document.getElementById("lon").value="";
+}
+function removeZone(i){zones.splice(i,1);save();}
+
+function distance(a,b,c,d){
+ const R=6371000, p=Math.PI/180;
+ const x=(c-a)*p, y=(d-b)*p;
+ const q=Math.sin(x/2)**2+Math.cos(a*p)*Math.cos(c*p)*Math.sin(y/2)**2;
+ return 2*R*Math.atan2(Math.sqrt(q),Math.sqrt(1-q));
+}
+
+function speak(text){
+ try{
+  const u=new SpeechSynthesisUtterance(text);
+  u.lang="tr-TR"; u.rate=0.9; u.volume=1;
+  speechSynthesis.cancel(); speechSynthesis.speak(u);
+ }catch(e){}
+}
+
+function notify(text){
+ if("Notification" in window && Notification.permission==="granted")
+   new Notification("Geo Alert", {body:text});
+}
+
+function alertFor(z,meters){
+ const key=z.name;
+ const now=Date.now();
+ // Aynı bölge için 5 dakika içinde tekrar tekrar ses çıkarmasın.
+ if(lastAlerts[key] && now-lastAlerts[key]<300000) return;
+ lastAlerts[key]=now;
+ const text=`Dikkat. ${z.name} bölgesine yaklaşıyorsun. Mesafe yaklaşık ${Math.round(meters)} metre.`;
+ speak(text); notify(text);
+}
+
+function check(lat,lon){
+ zones.forEach(z=>{
+  const d=distance(lat,lon,z.lat,z.lon);
+  if(d<=z.radius) alertFor(z,d);
+ });
+}
+
+function start(){
+ if(!navigator.geolocation){
+  document.getElementById("status").textContent="Bu tarayıcı konum özelliğini desteklemiyor.";
+  return;
+ }
+ if("Notification" in window) Notification.requestPermission().catch(()=>{});
+ navigator.geolocation.getCurrentPosition(
+  p=>updatePosition(p),
+  e=>document.getElementById("status").textContent="Konum izni alınamadı: "+e.message,
+  {enableHighAccuracy:true,maximumAge:5000,timeout:15000}
+ );
+ watchId=navigator.geolocation.watchPosition(
+  p=>updatePosition(p),
+  e=>document.getElementById("status").textContent="Konum hatası: "+e.message,
+  {enableHighAccuracy:true,maximumAge:5000,timeout:15000}
+ );
+ document.getElementById("status").textContent="🟢 Konum takibi açık";
+}
+function updatePosition(p){
+ const lat=p.coords.latitude, lon=p.coords.longitude;
+ document.getElementById("coords").textContent=`${lat.toFixed(6)}, ${lon.toFixed(6)} · doğruluk ±${Math.round(p.coords.accuracy)} m`;
+ check(lat,lon);
+}
+function testSound(){speak("Geo Alert sesli uyarı testi. Ses çalışıyor.");}
+
+render();
+</script>
+</body>
+</html>
