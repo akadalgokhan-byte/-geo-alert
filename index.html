@@ -1,14 +1,349 @@
-<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#111"><title>Geo Alert</title><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin:0;padding:20px;background:#f5f5f7;color:#111}.card{background:#fff;border-radius:18px;padding:18px;margin:12px 0;box-shadow:0 2px 12px #0001}button{width:100%;padding:15px;border:0;border-radius:12px;background:#111;color:#fff;font-size:16px;margin:6px 0}button.secondary{background:#e5e5ea;color:#111}input{width:100%;box-sizing:border-box;padding:13px;border:1px solid #ccc;border-radius:10px;margin:5px 0 10px;font-size:16px}.small{color:#666;font-size:14px}.ok{color:#16803c;font-weight:600}.warn{color:#b45309;font-weight:600}</style></head><body><h1>📍 Geo Alert</h1><div class="card"><div id="status">Konum takibi kapalı.</div><div class="small" id="coords">Konum alınmadı.</div><div class="small" id="accuracy"></div><button onclick="start()">📍 Konum Takibini Başlat</button><button onclick="addCurrent()">➕ Bulunduğum Konumu Ekle</button><button class="secondary" onclick="testSound()">🔊 Sesli Uyarıyı Test Et</button></div><div class="card"><h3>Yeni konum</h3><input id="name" placeholder="Konum adı"><input id="lat" type="number" step="any" placeholder="Enlem"><input id="lon" type="number" step="any" placeholder="Boylam"><input id="radius" type="number" value="3000" placeholder="Yarıçap (metre)"><button onclick="addZone()">Konumu Ekle</button></div><div class="card"><h3>Durum</h3><div id="distance">Henüz konum kontrol edilmedi.</div></div><div class="card"><h3>Kayıtlı konumlar</h3><div id="zones"></div></div><script>
-let watchId=null,current=null,zones=JSON.parse(localStorage.getItem("geoZones")||"[]"),alerted={};
-function save(){localStorage.setItem("geoZones",JSON.stringify(zones));render()}function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
-function render(){let b=document.getElementById("zones");b.innerHTML="";if(!zones.length){b.innerHTML='<div class="small">Henüz konum eklenmedi.</div>';return}zones.forEach((z,i)=>{let d=document.createElement("div");d.className="card";d.innerHTML=`<b>${esc(z.name)}</b><br><span class="small">${z.lat.toFixed(6)}, ${z.lon.toFixed(6)} · yarıçap ${z.radius} m</span><button class="secondary" onclick="removeZone(${i})">Sil</button>`;b.appendChild(d)})}
-function addZone(){let name=document.getElementById("name").value.trim()||"Kayıtlı konum",lat=Number(document.getElementById("lat").value),lon=Number(document.getElementById("lon").value),radius=Number(document.getElementById("radius").value)||3000;if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180){alert("Koordinatları kontrol et.");return}zones.push({name,lat,lon,radius});save();checkCurrent()}
-function addCurrent(){if(!current){alert("Önce Konum Takibini Başlat'a bas.");return}document.getElementById("name").value="Bulunduğum konum";document.getElementById("lat").value=current.lat;document.getElementById("lon").value=current.lon;document.getElementById("radius").value=3000;addZone()}
-function removeZone(i){zones.splice(i,1);save()}
-function distance(a,b,c,d){let R=6371000,p=Math.PI/180,x=(c-a)*p,y=(d-b)*p,q=Math.sin(x/2)**2+Math.cos(a*p)*Math.cos(c*p)*Math.sin(y/2)**2;return 2*R*Math.atan2(Math.sqrt(q),Math.sqrt(1-q))}
-function speak(t){let u=new SpeechSynthesisUtterance(t);u.lang="tr-TR";u.rate=.9;u.volume=1;speechSynthesis.cancel();speechSynthesis.speak(u)}
-function testSound(){speak("Geo Alert sesli uyarı testi. Ses çalışıyor.")}
-function checkCurrent(){if(!current)return;let inside=false;zones.forEach((z,i)=>{let d=distance(current.lat,current.lon,z.lat,z.lon);if(d<=z.radius){inside=true;document.getElementById("distance").innerHTML=`<span class="warn">⚠️ ${esc(z.name)} bölgesindesin.</span> Mesafe: ${Math.round(d)} m`;let k=z.name+"_"+i;if(!alerted[k]){alerted[k]=Date.now();speak(`Dikkat. ${z.name} bölgesine girdin. Mesafe yaklaşık ${Math.round(d)} metre.`)}}});if(!inside&&zones.length)document.getElementById("distance").textContent="Kayıtlı bölgelerin dışındasın."}
-function update(p){current={lat:p.coords.latitude,lon:p.coords.longitude};document.getElementById("coords").textContent=`${current.lat.toFixed(6)}, ${current.lon.toFixed(6)}`;document.getElementById("accuracy").textContent=`GPS doğruluğu: yaklaşık ±${Math.round(p.coords.accuracy)} m`;document.getElementById("status").innerHTML='<span class="ok">🟢 Konum takibi açık</span>';checkCurrent()}
-function start(){if(!navigator.geolocation){alert("Bu tarayıcı konumu desteklemiyor.");return}navigator.geolocation.getCurrentPosition(update,e=>document.getElementById("status").textContent="Konum alınamadı: "+e.message,{enableHighAccuracy:true,maximumAge:0,timeout:20000});if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=navigator.geolocation.watchPosition(update,e=>document.getElementById("status").textContent="Konum hatası: "+e.message,{enableHighAccuracy:true,maximumAge:3000,timeout:20000})}render();
-</script></body></html>
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111">
+  <title>Geo Alert Pro</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 20px; background: #f5f5f7; color: #111; }
+    .card { background: #fff; border-radius: 18px; padding: 18px; margin: 12px 0; box-shadow: 0 2px 12px #0001; }
+    button { width: 100%; padding: 15px; border: 0; border-radius: 12px; background: #111; color: #fff; font-size: 16px; margin: 6px 0; cursor: pointer; font-weight: 600; }
+    button.secondary { background: #e5e5ea; color: #111; }
+    button.danger { background: #ff3b30; color: #fff; }
+    input { width: 100%; box-sizing: border-box; padding: 13px; border: 1px solid #ccc; border-radius: 10px; margin: 5px 0 10px; font-size: 16px; }
+    .small { color: #666; font-size: 14px; }
+    .ok { color: #16803c; font-weight: 600; }
+    .warn { color: #b45309; font-weight: 600; }
+    .zone-item { display: flex; justify-content: space-between; align-items: center; margin: 8px 0; padding: 12px; background: #f9f9fb; border-radius: 12px; }
+    .zones-list { max-height: 400px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+
+  <h1>📍 Geo Alert</h1>
+
+  <div class="card">
+    <div id="status">Konum takibi kapalı.</div>
+    <div class="small" id="coords">Konum alınmadı.</div>
+    <div class="small" id="accuracy"></div>
+    <button onclick="start()">📍 Konum Takibini Başlat</button>
+    <button onclick="addCurrent()">➕ Bulunduğum Konumu Ekle</button>
+    <button class="secondary" onclick="testSound()">🔊 Sesli Uyarıyı Test Et</button>
+  </div>
+
+  <div class="card">
+    <h3>Yeni Konum Ekle</h3>
+    <input id="name" placeholder="Konum adı">
+    <input id="lat" type="number" step="any" placeholder="Enlem (Latitude)">
+    <input id="lon" type="number" step="any" placeholder="Boylam (Longitude)">
+    <input id="radius" type="number" value="3000" placeholder="Yarıçap (metre)">
+    <button onclick="addZone()">Konumu Kaydet</button>
+  </div>
+
+  <div class="card">
+    <h3>Canlı Durum</h3>
+    <div id="distance">Henüz konum kontrol edilmedi.</div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h3>Kayıtlı Konumlar (<span id="zone-count">0</span>)</h3>
+      <button class="secondary" style="width:auto; padding:6px 12px; font-size:12px;" onclick="resetToDefaultZones()">85 Varsayılanı Yükle</button>
+    </div>
+    <input id="search" placeholder="Konumlarda ara..." oninput="render()">
+    <div class="zones-list" id="zones"></div>
+  </div>
+
+<script>
+const DEFAULT_ZONES = [
+  { name: "TOYA MODA TEVFIK BEY, 20 TEMMUZ CD., 34295 KüçüKçEKMECE/İSTANBUL", lat: 41.00857350, lon: 28.80605750, radius: 3000 },
+  { name: "BAşAKşEHIR MH OLIMPIYAT BLV 2/B BAşAKşEHIR ÇAM VE SAKURA HAST. DüKKAN A-02, 34494 BAşAKşEHIR/İSTANBUL", lat: 41.10375240, lon: 28.76322140, radius: 3000 },
+  { name: "SADECE TRAFIK KONUM (175)", lat: 41.00376942, lon: 28.63761003, radius: 3000 },
+  { name: "SADECE TRAFIK KONUM (173)", lat: 40.96449466, lon: 29.12450828, radius: 3000 },
+  { name: "KOZYATAĞI O2 BAĞLANTISI", lat: 40.98357570, lon: 29.10290760, radius: 3000 },
+  { name: "ANADOLU YAKASı, DUMLUPıNAR, 34720 KADıKöY/İSTANBUL", lat: 40.99709180, lon: 29.05905230, radius: 3000 },
+  { name: "FENERBAHÇE ÜNİVERSİTESİ - ATAŞEHİR İSTANBUL", lat: 40.99542630, lon: 29.12038990, radius: 3000 },
+  { name: "İçERENKöY, ATA SK. NO:49, 34752 ATAşEHIR/İSTANBUL", lat: 40.96010290, lon: 29.11374200, radius: 3000 },
+  { name: "MICHELIN - HS OTOMOTIV EUROMASTER", lat: 40.90955000, lon: 29.21025000, radius: 3000 },
+  { name: "D016", lat: 41.02980710, lon: 29.13306980, radius: 3000 },
+  { name: "CLK ÇANTA VALİZ", lat: 41.05392410, lon: 28.86903810, radius: 3000 },
+  { name: "OSMANGAZİ CAD.- SANCAKTEPE İSTANBUL", lat: 40.97502820, lon: 29.23932170, radius: 3000 },
+  { name: "EMI TüRKMEN TAğAM", lat: 41.02404330, lon: 29.08371710, radius: 3000 },
+  { name: "TüRKIYE İş BANKASı BANKAMATIK", lat: 41.03180000, lon: 28.68450000, radius: 3000 },
+  { name: "MAHMUTBEY, TAşOCAğı YOLU CAD. 38/1, 34218 BAğCıLAR/İSTANBUL, TüRKIYE", lat: 41.05997700, lon: 28.81450540, radius: 3000 },
+  { name: "EŞBAH İPEKYOLU", lat: 41.06203030, lon: 28.79815930, radius: 3000 },
+  { name: "BAşıBüYüK, EMEK CD. NO:292, 34854 MALTEPE/İSTANBUL, TüRKIYE", lat: 40.95749250, lon: 29.16765210, radius: 3000 },
+  { name: "BüYüKBAKKALKöY, MALTEPE ÜNV. MARMARA EğITIM KöYü NO:26, 34858 MALTEPE/İSTANBUL, TüRKIYE", lat: 40.96255200, lon: 29.18946820, radius: 3000 },
+  { name: "GIRNE, BAşöğRETMEN CD, 34843 MALTEPE/İSTANBUL", lat: 40.93592320, lon: 29.13826560, radius: 3000 },
+  { name: "BOSTANCı MARMARAY", lat: 40.95406430, lon: 29.09412940, radius: 3000 },
+  { name: "CEVIZLIBAğ", lat: 41.01663200, lon: 28.91121800, radius: 3000 },
+  { name: "ANADOLU YAKASı, ÜNALAN, 34700 ÜSKüDAR/İSTANBUL", lat: 40.99929020, lon: 29.05849660, radius: 3000 },
+  { name: "ACıBADEM MAHALLESI ÇEçEN SOKAK AKASYA A1 KULE KENT ETABı, ACıBADEM, NO. 25A KAT. 33 D.228, 34660 ÜSKüDAR/İSTANBUL, TüRKIYE", lat: 41.00030390, lon: 29.05518710, radius: 3000 },
+  { name: "MERDIVENKöY, YUMURTACı ABDI BEY CD. NO:111, 34720 KADıKöY/İSTANBUL, TüRKIYE", lat: 40.99262440, lon: 29.07137760, radius: 3000 },
+  { name: "TURGUT REIS, 400. SK. 22/1, 34235 ESENLER/İSTANBUL, TüRKIYE", lat: 41.06431520, lon: 28.86685040, radius: 3000 },
+  { name: "BAKıRKöY MARMARAFORUM CIVARı ÖNü", lat: 41.00145400, lon: 28.88574820, radius: 3000 },
+  { name: "YAKUPLU, SANAYI CD. NO:6, 34524 BEYLIKDüZü/İSTANBUL, TüRKIYE", lat: 41.00536750, lon: 28.68171760, radius: 3000 },
+  { name: "BARAMPAşA İSTANBUL, OTOGAR BAğLANTı YOLU CIVARı", lat: 41.04366620, lon: 28.88557090, radius: 3000 },
+  { name: "TEVFIK BEY, MALAZGIRT CD. 1-1 B, 34295 KüçüKçEKMECE/İSTANBUL, TüRKIYE", lat: 41.00800160, lon: 28.80768990, radius: 3000 },
+  { name: "AVRUPA YAKASı, ZIYA GöKALP, 34490 BAşAKşEHIR/İSTANBUL", lat: 41.06161040, lon: 28.80757480, radius: 3000 },
+  { name: "ACıBADEM, BADEMLI SK. NO:20, 34660 ÜSKüDAR/İSTANBUL, TüRKIYE", lat: 41.01263240, lon: 29.05993860, radius: 3000 },
+  { name: "KüçüK ÇAMLıCA, ÜçPıNARLAR CD. NO:34, 34696 ÜSKüDAR/İSTANBUL, TüRKIYE", lat: 41.01279640, lon: 29.05972670, radius: 3000 },
+  { name: "TALATPAşA, İMRAHOR CD. 37A, 34400 KAğıTHANE/İSTANBUL, TüRKIYE", lat: 41.06571440, lon: 28.95722710, radius: 3000 },
+  { name: "ALTıNTEPSI, ÇIFTLIK CD. 1D, 34035 BAYRAMPAşA/İSTANBUL, TüRKIYE", lat: 41.04372030, lon: 28.88573350, radius: 3000 },
+  { name: "ALTıNşEHIR, YANYOL KöPRü BAğLANTıSı, BAşAKşEHIR/İSTANBUL", lat: 41.06100270, lon: 28.75509070, radius: 3000 },
+  { name: "RıHTıM CD., KADıKöY/İSTANBUL", lat: 40.99366330, lon: 29.02473090, radius: 3000 },
+  { name: "BARBAROS BLV.", lat: 41.05728900, lon: 29.01022400, radius: 3000 },
+  { name: "HUZUREVI, MALTEPE/İSTANBUL, TüRKIYE", lat: 40.92979880, lon: 29.14662860, radius: 3000 },
+  { name: "TOPçULAR, E5, 34055 EYüPSULTAN/İSTANBUL", lat: 41.02886340, lon: 28.92390870, radius: 3000 },
+  { name: "EDıRNEKAPı GARAJı (ÇıKış), TOPçULAR, 34055 EYüPSULTAN/İSTANBUL, TüRKIYE", lat: 41.02855660, lon: 28.92612920, radius: 3000 },
+  { name: "ANADOLU YAKASı, BOSTANCı, 34744 KADıKöY/İSTANBUL", lat: 40.96528270, lon: 29.10460240, radius: 3000 },
+  { name: "KARAYOLLARı, AYDıNEVLER, 34854 MALTEPE/İSTANBUL, TüRKIYE", lat: 40.95100950, lon: 29.12040530, radius: 3000 },
+  { name: "ACıBADEM, KüçüKYALı AYDıNEVLER YOLU NO:7, 34854 KADıKöY/İSTANBUL, TüRKIYE", lat: 40.95144400, lon: 29.12199490, radius: 3000 },
+  { name: "AYDıNEVLER, SITELER YOLU NO:1, 34854 MALTEPE/İSTANBUL, TüRKIYE", lat: 40.95185050, lon: 29.12174110, radius: 3000 },
+  { name: "NIşANGAH", lat: 41.05577390, lon: 28.96656840, radius: 3000 },
+  { name: "KüçüKçEKMECE, FLORYA KAVşAğı, BEşYOL YAN YOL CIVARı", lat: 40.98917430, lon: 28.79244560, radius: 3000 },
+  { name: "OTOGAR BAğLANTı YOLU, İSTANBUL", lat: 41.04577460, lon: 28.89165590, radius: 3000 },
+  { name: "D-100 OTOYOLU - MALTEPE İSTANBUL", lat: 40.94310890, lon: 29.12994190, radius: 3000 },
+  { name: "ESENTEPE, KARTAL KAVşAğı, KARTAL/İSTANBUL", lat: 40.90594550, lon: 29.21086080, radius: 3000 },
+  { name: "KAZIM KARABEKİR CADDESİ - ARNAVUTKÖY", lat: 41.18439950, lon: 28.72059220, radius: 3000 },
+  { name: "YENIBOSNA MERKEZ, DEğIRMENBAHçE CD., 34197 BAHçELIEVLER/İSTANBUL", lat: 41.00942230, lon: 28.81284240, radius: 3000 },
+  { name: "HAMIDIYE, İSTANBUL ÇEVRE YOLU, 34418 KAğıTHANE/İSTANBUL", lat: 41.10021160, lon: 28.98073390, radius: 3000 },
+  { name: "BORUSAN OTO AVCıLAR - BMW YETKILI SATıCıSı VE YETKILI SERVISI", lat: 40.99276920, lon: 28.71682100, radius: 3000 },
+  { name: "CIğERHANE FLORYA", lat: 40.98742810, lon: 28.79556130, radius: 3000 },
+  { name: "İSTANBUL ŞİLE YOLU - ÜMRANİYE", lat: 41.01415410, lon: 29.18981420, radius: 3000 },
+  { name: "İETT SAMANDıRA METROSU", lat: 40.98401230, lon: 29.23172910, radius: 3000 },
+  { name: "POFUDUK KIDS", lat: 41.18302230, lon: 28.71620980, radius: 3000 },
+  { name: "BOSNA BULVARI - SULTANBEYLİ", lat: 40.96990670, lon: 29.26216610, radius: 3000 },
+  { name: "VIEM", lat: 41.08772000, lon: 28.98243100, radius: 3000 },
+  { name: "SüNNET KöPRüSü", lat: 41.06350810, lon: 28.95098780, radius: 3000 },
+  { name: "ZüHTüPAşA, FAHRETTIN KERIM GöKAY CD NO:12, 34724 KADıKöY/İSTANBUL", lat: 40.99112960, lon: 29.03948650, radius: 3000 },
+  { name: "HOŞDERE ESENYURT YOLU - ESENYURT", lat: 41.05631420, lon: 28.67126710, radius: 3000 },
+  { name: "ÇAMLıK, TURGUT ÖZAL BLV., 34774 ÜMRANIYE/İSTANBUL", lat: 40.99722820, lon: 29.12963320, radius: 3000 },
+  { name: "SADECE TRAFIK KONUM (49)", lat: 40.88365622, lon: 29.20734868, radius: 3000 },
+  { name: "SADECE TRAFIK KONUM (47)", lat: 40.84963135, lon: 29.29825859, radius: 3000 },
+  { name: "YAKUPLU UYGULAMA", lat: 41.00497600, lon: 28.66763500, radius: 3000 },
+  { name: "BORUSAN AVCıLAR", lat: 40.99304900, lon: 28.71728400, radius: 3000 },
+  { name: "ALTıNşEHIR KöPRüALTı", lat: 41.06202500, lon: 28.74743400, radius: 3000 },
+  { name: "212 AVM BAğCıLAR", lat: 41.05303900, lon: 28.81277100, radius: 3000 },
+  { name: "ATAKENT 222 CADDE", lat: 41.04943100, lon: 28.78820600, radius: 3000 },
+  { name: "G PLUS BAğCıLAR", lat: 41.02627000, lon: 28.81452900, radius: 3000 },
+  { name: "KOCASINAN MEZARLıK", lat: 41.01450400, lon: 28.83580200, radius: 3000 },
+  { name: "YENIBOSNA CEM EVI", lat: 41.01392100, lon: 28.83911900, radius: 3000 },
+  { name: "MEMORIAL KöPRü ÜSTü", lat: 40.99302300, lon: 28.85142900, radius: 3000 },
+  { name: "ATAKöY BöLGESI", lat: 40.98357200, lon: 28.85797400, radius: 3000 },
+  { name: "FLORYA CIğERHANE", lat: 40.98759800, lon: 28.79560700, radius: 3000 },
+  { name: "ŞIşHANE RAMPA", lat: 41.02808300, lon: 28.97092100, radius: 3000 },
+  { name: "SAITçIFTçI YıLDıZ KAVşAğı", lat: 41.05297800, lon: 29.00845500, radius: 3000 },
+  { name: "İDEALTEPE KöPRü ALTı", lat: 40.94316600, lon: 29.12993600, radius: 3000 },
+  { name: "HILTOWN KöPRüALTı", lat: 40.95078600, lon: 29.12117600, radius: 3000 },
+  { name: "E-5 FıNDıKLı GIRIş", lat: 40.96057200, lon: 29.11529600, radius: 3000 },
+  { name: "MACROCENTER HALK CAD", lat: 40.98770200, lon: 29.10355700, radius: 3000 },
+  { name: "ATAşEHIR KENTPLUS", lat: 41.00112600, lon: 29.10391500, radius: 3000 },
+  { name: "MEDENIYET ÜNIVERSITESI", lat: 40.99712700, lon: 29.05945100, radius: 3000 },
+  { name: "BOZUK YOL KADıKöY", lat: 40.99828300, lon: 29.05933400, radius: 3000 }
+];
+
+let watchId = null;
+let current = null;
+let zones = JSON.parse(localStorage.getItem("geoZones"));
+
+if (!zones || zones.length === 0) {
+  zones = DEFAULT_ZONES;
+  localStorage.setItem("geoZones", JSON.stringify(zones));
+}
+
+let activeAlerts = new Set();
+
+function resetToDefaultZones() {
+  if (confirm("Kayıtlı konumlar sıfırlanıp 85 varsayılan konum yüklensin mi?")) {
+    zones = Array.from(DEFAULT_ZONES);
+    localStorage.setItem("geoZones", JSON.stringify(zones));
+    render();
+  }
+}
+
+function save() {
+  localStorage.setItem("geoZones", JSON.stringify(zones));
+  render();
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[m]));
+}
+
+function playBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.3);
+  } catch(e) {}
+}
+
+function speak(text) {
+  playBeep();
+  setTimeout(() => {
+    let u = new SpeechSynthesisUtterance(text);
+    u.lang = "tr-TR";
+    u.rate = 0.95;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  }, 300);
+}
+
+function testSound() {
+  speak("Geo Alert sesli uyarı testi. Sistem sorunsuz çalışıyor.");
+}
+
+function distance(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const p = Math.PI / 180;
+  const a = Math.sin((lat2 - lat1) * p / 2) ** 2 +
+            Math.cos(lat1 * p) * Math.cos(lat2 * p) *
+            Math.sin((lon2 - lon1) * p / 2) ** 2;
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function render() {
+  let b = document.getElementById("zones");
+  let query = (document.getElementById("search")?.value || "").toLowerCase();
+  document.getElementById("zone-count").textContent = zones.length;
+  b.innerHTML = "";
+
+  if (!zones.length) {
+    b.innerHTML = '<div class="small">Henüz kayıtlı bir konum bulunmuyor.</div>';
+    return;
+  }
+
+  let list = zones.map((z, i) => ({ ...z, originalIndex: i }));
+
+  if (current) {
+    list.forEach(z => z.dist = distance(current.lat, current.lon, z.lat, z.lon));
+    list.sort((a, b) => a.dist - b.dist);
+  }
+
+  list.filter(z => z.name.toLowerCase().includes(query)).forEach((z) => {
+    let distText = z.dist !== undefined ? `<br><span class="small" style="color:#007aff;">Mesafe: ${Math.round(z.dist)} m</span>` : '';
+    let d = document.createElement("div");
+    d.className = "zone-item";
+    d.innerHTML = `
+      <div>
+        <b>${esc(z.name)}</b><br>
+        <span class="small">${z.lat.toFixed(6)}, ${z.lon.toFixed(6)} · Yarıçap: ${z.radius}m</span>
+        ${distText}
+      </div>
+      <button class="danger" style="width:auto; padding:6px 10px; font-size:12px;" onclick="removeZone(${z.originalIndex})">Sil</button>
+    `;
+    b.appendChild(d);
+  });
+}
+
+function addZone() {
+  let name = document.getElementById("name").value.trim() || "Kayıtlı Bölge";
+  let lat = Number(document.getElementById("lat").value);
+  let lon = Number(document.getElementById("lon").value);
+  let radius = Number(document.getElementById("radius").value) || 3000;
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    alert("Lütfen geçerli enlem ve boylam değerleri girin.");
+    return;
+  }
+
+  zones.push({ name, lat, lon, radius });
+  save();
+  checkCurrent();
+  
+  document.getElementById("name").value = "";
+  document.getElementById("lat").value = "";
+  document.getElementById("lon").value = "";
+}
+
+function addCurrent() {
+  if (!current) {
+    alert("Önce Konum Takibini Başlat butonuna basarak konumunuzu alın.");
+    return;
+  }
+  document.getElementById("name").value = "Mevcut Konum";
+  document.getElementById("lat").value = current.lat;
+  document.getElementById("lon").value = current.lon;
+}
+
+function removeZone(i) {
+  zones.splice(i, 1);
+  save();
+}
+
+function checkCurrent() {
+  if (!current) return;
+  let insideZones = [];
+
+  zones.forEach((z, i) => {
+    let d = distance(current.lat, current.lon, z.lat, z.lon);
+    let key = z.name + "_" + i;
+
+    if (d <= z.radius) {
+      insideZones.push(`${esc(z.name)} (${Math.round(d)}m)`);
+      if (!activeAlerts.has(key)) {
+        activeAlerts.add(key);
+        speak(`Dikkat! ${z.name} bölgesine girdiniz. Mesafe yaklaşık ${Math.round(d)} metre.`);
+      }
+    } else {
+      if (activeAlerts.has(key)) {
+        activeAlerts.delete(key);
+        speak(`${z.name} bölgesinden çıktınız.`);
+      }
+    }
+  });
+
+  let statusDiv = document.getElementById("distance");
+  if (insideZones.length > 0) {
+    statusDiv.innerHTML = `<span class="warn">⚠️ Bölge İçindesiniz:</span><br>${insideZones.join("<br>")}`;
+  } else if (zones.length > 0) {
+    statusDiv.textContent = "Kayıtlı bölgelerin dışındasınız.";
+  } else {
+    statusDiv.textContent = "Henüz bölge eklenmedi.";
+  }
+
+  render();
+}
+
+function update(p) {
+  current = { lat: p.coords.latitude, lon: p.coords.longitude };
+  document.getElementById("coords").textContent = `${current.lat.toFixed(6)}, ${current.lon.toFixed(6)}`;
+  document.getElementById("accuracy").textContent = `GPS Doğruluğu: ±${Math.round(p.coords.accuracy)} m`;
+  document.getElementById("status").innerHTML = '<span class="ok">🟢 Konum Takibi Aktif</span>';
+  checkCurrent();
+}
+
+function start() {
+  if (!navigator.geolocation) {
+    alert("Tarayıcınız konum servislerini desteklemiyor.");
+    return;
+  }
+  
+  if ('wakeLock' in navigator) {
+    navigator.wakeLock.request('screen').catch(()=>{});
+  }
+
+  navigator.geolocation.getCurrentPosition(update, e => {
+    document.getElementById("status").textContent = "Konum alınamadı: " + e.message;
+  }, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  
+  watchId = navigator.geolocation.watchPosition(update, e => {
+    document.getElementById("status").textContent = "Konum hatası: " + e.message;
+  }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
+}
+
+render();
+</script>
+</body>
+</html>
